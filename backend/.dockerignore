@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+**/*.pyc
+.pytest_cache/
+
+# 本地秘钥(容器内用 Railway 注入的 env)
+.env
+
+# 模板本地构建产物(镜像内由 npm install / vite build 重新生成,避免平台不一致)
+templates/*/node_modules/
+templates/*/dist/
+
+# 杂项
+.git/
+.gitignore
+README.md

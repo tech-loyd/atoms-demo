@@ -1,0 +1,29 @@
+# deps
+node_modules/
+.next/
+out/
+dist/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# build
+.vercel/
+
+# tooling artifacts
+.playwright-mcp/
+.claude/
+.pytest_cache/
+backend/static/previews/

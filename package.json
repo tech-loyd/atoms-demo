@@ -1,0 +1,11 @@
+{
+  "name": "atoms-demo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.28.2",
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build:frontend": "pnpm --filter frontend build",
+    "dev:backend": "echo '见 backend/README.md,用 uvicorn 起'"
+  }
+}
