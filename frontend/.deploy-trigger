@@ -1,1 +1,2 @@
-// 触发 Railway 重新部署(利用 /frontend/** watch path),让最新的 backend/railway.json(sh -c startCommand)被读取应用。
+// 触发 Railway 重新部署(/frontend/** watch path),让最新 commit 被 Railway 读取应用。
+// 本次:validator.py 的 preview_url 改用 settings.preview_base_url(由 PREVIEW_BASE_URL 环境变量驱动),不再硬编 localhost:8000。

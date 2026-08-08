@@ -285,11 +285,16 @@ def build_vercel_files(files: list[dict]) -> list[dict]:
     # 先放模板骨架(允许被 state.files 覆盖)
     for path, content in _read_template_files().items():
         merged[path.replace("\\", "/").lstrip("./")] = content
-    # 再放 state.files
+    # 再放 state.files(index.css 例外:模板固定提供,Alex 若误产则忽略)
     for f in files:
         path = (f.get("path") or "").replace("\\", "/").lstrip("./")
-        if path:
-            merged[path] = f.get("content", "")
+        if not path:
+            continue
+        # index.css 是设计基线载体(@fontsource 字体 + tailwind 指令),由模板固定提供;
+        # Alex 若误产 src/index.css 一律忽略,避免覆盖字体引入(此处与 validator._write_workspace 对齐)。
+        if path == "src/index.css":
+            continue
+        merged[path] = f.get("content", "")
     # Vercel inlined files:[{file: <path>, data: <content string>}]
     return [{"file": p, "data": c} for p, c in merged.items()]
 

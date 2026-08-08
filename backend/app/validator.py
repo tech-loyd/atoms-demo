@@ -153,19 +153,15 @@ def _write_workspace(files: list[dict], workspace: Path) -> None:
         safe.parent.mkdir(parents=True, exist_ok=True)
         safe.write_text(content, encoding="utf-8")
 
-    # 保证 src/index.css 含 tailwind 三指令,且放在最前(tailwind 要求指令在前以控
-    # 制注入顺序)。Alex 若没产 index.css → 落模板的;若产了但**缺 @tailwind 指令**(自己
-    # 写了纯 CSS 把模板 tailwind 指令覆盖丢了)→ 前置拼上模板三行,保留 Alex 的自定义样式。
-    # 否则 tailwind 不生成 base/utilities,组件里的 className 失效(虽不致 build 失败,但样式崩)。
+    # index.css 是设计基线载体(@fontsource IBM Plex 字体 @import + tailwind 三指令)。
+    # 由模板固定提供,prompt 约束 Alex 不产 src/index.css。这里**无条件用模板版**:
+    # 即便 Alex 误产了 index.css(含或不含 @tailwind),都强制覆盖为模板版,避免丢字体引入
+    # 导致 IBM Plex Sans 不生效(回落 system 字体)。DaisyUI 组件类不受影响(由 tailwind 插件生成)。
     idx_css = workspace / "src" / "index.css"
-    tailwind_src = (TEMPLATE_DIR / "src" / "index.css").read_text(encoding="utf-8")
-    if not idx_css.exists():
-        idx_css.parent.mkdir(parents=True, exist_ok=True)
-        idx_css.write_text(tailwind_src, encoding="utf-8")
-    else:
-        alex_css = idx_css.read_text(encoding="utf-8")
-        if "@tailwind" not in alex_css:
-            idx_css.write_text(tailwind_src.rstrip() + "\n\n" + alex_css, encoding="utf-8")
+    idx_css.parent.mkdir(parents=True, exist_ok=True)
+    idx_css.write_text(
+        (TEMPLATE_DIR / "src" / "index.css").read_text(encoding="utf-8"), encoding="utf-8"
+    )
 
 
 def run_build(files: list[dict], session_id: str = "") -> tuple[bool, str]:
@@ -436,7 +432,7 @@ def validate_build(
 
     if passed:
         # build 成功 → 写 preview_url(后端 Vite 构建产物 iframe 预览,不依赖 CDN)
-        preview_url = f"http://localhost:8000/preview/{session_id}/dist/index.html"
+        preview_url = f"{settings.preview_base_url}/{session_id}/dist/index.html"
         msg = f"✅ vite build 通过(第 {iter_count} 次校验)。生成的 React 应用可正常运行,流程结束。"
         if warnings_extra:
             msg = f"{msg}\n\n{warnings_extra}"

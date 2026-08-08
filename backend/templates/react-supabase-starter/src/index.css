@@ -1,3 +1,10 @@
+/* 字体走系统栈(-apple-system 优先):Mac/iOS 原生 SF Pro,零外部依赖(见 tailwind.config)。
+   本文件由项目模板固定提供(LLM 不产 src/index.css);validator/deploy 会强制保留它。
+   DaisyUI 组件类由 tailwind.config 的 daisyui 插件生成,无需在此声明。*/
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body { @apply font-sans; }
+}

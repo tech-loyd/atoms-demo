@@ -148,7 +148,7 @@ _DESIGN_INSTRUCTION = """你是一位资深架构师 Bob。请根据给定的 PR
 
 只覆盖 PRD 提到的功能,不编造多余表。表数量 2-5 张为宜。"""
 
-_CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定的设计文档,生成一个精致、有视觉冲击力、开箱即丰盈的 React + Vite + Tailwind + Supabase 应用源码(严禁冷启动空列表)。
+_CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定的设计文档,生成一个精致、有视觉冲击力、开箱即丰盈的 React + Vite + Tailwind + DaisyUI + Supabase 应用源码(严禁冷启动空列表)。
 
 **输出格式(严格遵守,只输出文件块,不要任何解释、前后文)**:
 
@@ -176,11 +176,15 @@ _CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定�
 - 此时 src/App.tsx 根据 session 状态切 Auth / 主界面(session 为空 → 显示 Auth;有 session → 显示主界面)。
 - **若需求不含登录**:不要产 Auth.tsx;src/App.tsx 直接渲染主界面,**不要写任何 session / supabase.auth 判断**,不要 import Auth。
 
+**UI 框架:DaisyUI(已接入模板,必须用)**:
+项目模板已集成 DaisyUI v4(Tailwind 组件库)+ 系统字体(SF Pro 优先)+ **apple 主题(Apple 风:系统蓝 #0071e3 + 大圆角 + 浅灰背景 #f5f5f7)**。**必须用 DaisyUI 成品组件类搭界面**,不要自己堆 Tailwind 工具类去模拟按钮/卡片/导航——DaisyUI 的类已自带设计基线(配色/圆角/阴影/hover/间距都帮你定好了),直接用即可。
+常用类(优先用):导航 `navbar`/`menu`/`avatar`;统计 `stats`>`stat`(含 `stat-title`/`stat-value`/`stat-desc`/`stat-figure`);卡片 `card`>`card-body`>`card-title`/`card-actions`;进度 `progress progress-primary`;状态 `badge badge-success`/`badge-info`/`badge-warning`/`badge-error`;按钮 `btn btn-primary`/`btn btn-ghost`/`btn-sm`/`btn-outline`;表单 `form-control`+`label-text`+`input input-bordered`/`select select-bordered`/`textarea textarea-bordered`;布局 `container mx-auto`/`grid grid-cols-2 md:grid-cols-4 gap-4`/`flex items-center gap-3`;语义色 `text-primary`/`text-success`/`text-warning`/`text-error`/`text-base-content/60`。
+
 **业务组件(始终产出,按职责拆分,给足页面空间)**:
-- src/components/Dashboard.tsx — 主界面容器:编排"导航栏 + 统计卡片区 + 主列表 + 录入表单"。
-- src/components/<业务>List.tsx(如 HabitList.tsx)—— 对 design.supabase_tables 的主业务表做 CRUD,以卡片/行项展示。
-- src/components/Stats.tsx — 统计卡片区:展示总数 / 完成率 / 今日进度等聚合指标(由列表数据本地计算)。
-- src/components/Add<X>Form.tsx — 录入表单(弹窗或内联),用于新增业务记录。
+- src/components/Dashboard.tsx — 主界面容器:编排"navbar + stats 统计区 + 主列表 + 录入表单",整体包 `container mx-auto p-4 md:p-8`。
+- src/components/Stats.tsx — 统计卡片区:用 `stats`(或 grid 排多个 `stats`)展示 2-4 个聚合指标(总数/完成率/今日进度,列表数据本地算),每个 `stat` 配 `stat-figure`(emoji)+`stat-title`+`stat-value`(语义色如 `text-primary`)+`stat-desc`。
+- src/components/<业务>List.tsx(如 HabitList.tsx)—— 主业务表 CRUD:用 `card` 网格展示列表项,每项 `card-body` 含 `card-title`(配 `badge` 状态)+ 描述 + `progress` 进度 + `card-actions` 里的 `btn`(打卡/编辑/删除)。
+- src/components/Add<X>Form.tsx — 录入表单:`card` 内放 `form-control` 组(`input input-bordered`/`select select-bordered`),提交用 `btn btn-primary`;弹窗形态可用 DaisyUI `modal`。
 
 **页面丰富度(关键,严禁做成单薄页面)**:
 - 主界面必须含 **顶部导航栏(产品名 + 可选用户信息)+ 统计卡片区(2-4 张卡片)+ 主列表(卡片或行项,带图标和状态)+ 录入表单**,而不是只有一个"添加"按钮。
@@ -190,12 +194,13 @@ _CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定�
 - **一切写操作(insert/update/delete)用到的外键 id 必须取自 Supabase 查询返回的对象,严禁直接用前端内存兜底数组里的 id**(同因:内存 id 可能是非法 uuid / 库里根本不存在)。
 - **严禁冷启动空列表(只读兜底,仅在网络失败时用)**:`upsert 种子 → 查库渲染` 是主路径;只有当 Supabase 查询本身抛错(网络/配额)时,才回落到内存种子做**只读展示**,并在 UI 提示"离线演示数据,登录/联网后可操作"。
 
-**视觉设计(Tailwind 精致)**:
-- 用渐变、阴影(shadow-lg/xl)、圆角卡片(rounded-2xl)、hover 效果(hover:shadow-xl hover:-translate-y-1 transition)营造质感。
-- 标题大字号加粗(text-3xl/4xl font-bold),可用渐变文字(bg-clip-text text-transparent bg-gradient-to-r)。
-- 按钮有 hover/active 态(hover:scale-105 active:scale-95 transition)。
-- 空态给友好提示(emoji + 引导文案),不要裸露 "No data"。
-- 图标用 emoji 或内联 SVG,**不要引图标库**(如 lucide-react / react-icons)。
+**视觉设计(Apple 风,DaisyUI apple 主题已提供基线)**:
+- **风格基调:Apple 产品页质感** —— 轻盈、大量留白(外层 `container mx-auto p-6 md:p-10`)、柔和。**大圆角由主题提供**(card/stats 自带 ~20px 圆角,不要手动加 `rounded-*`);导航栏/浮层可加 `backdrop-blur-xl bg-base-100/70` 营造毛玻璃。主色 `primary`(系统蓝),页面底 `base-200`(浅灰),卡片底 `base-100`(白)。
+- **配色只用 DaisyUI 语义色**(`primary/secondary/accent/success/warning/error` + `base-content/base-300` 的 `text-*`/`bg-*`/`badge-*`/`progress-*` 变体)。**严禁**裸 Tailwind 色(`blue-500`/`slate-800`/`indigo-600`/`bg-gradient-to-r` 等)——它们绕过主题、配色失控、换主题不跟随。
+- **不要自己堆圆角/阴影/hover 工具类**(`rounded-2xl`/`shadow-xl`/`hover:-translate-y-1` 等):`card`/`btn`/`stats` 已自带。布局间距用 `gap-*`/`p-*` 即可。
+- 标题用语义 + 字重(`card-title`/`text-2xl font-bold`),不要手写渐变文字。
+- 空态用 `card` + emoji + 引导文案,不要裸露 "No data"。
+- 图标用 emoji 或内联 SVG,**不要引图标库**(lucide-react / react-icons 等)——DaisyUI 不依赖图标库,引了反而增加 build 风险。
 
 硬约束:
 - **只产 src/* 源码**。不要 package.json / vite.config / tsconfig / index.html / postcss / tailwind.config / index.css —— 这些由项目模板固定提供(Validator 与前端 Sandpack 共用同一套模板)。
