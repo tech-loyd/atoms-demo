@@ -153,7 +153,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="atoms-backend",
     version="0.2.0",
-    description="atoms 复刻后端:LangGraph + CopilotKitMiddleware + GLM-5.2(三角色 SOP PM→Architect→Engineer + HITL 批准)",
+    description="atoms 后端:LangGraph + CopilotKitMiddleware + GLM-5.2(三角色 SOP PM→Architect→Engineer + HITL 批准)",
     lifespan=lifespan,
 )
 

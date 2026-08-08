@@ -138,7 +138,7 @@ _DESIGN_INSTRUCTION = """你是一位资深架构师 Bob。请根据给定的 PR
 - product_type:三选一,"web_app" / "landing" / "tool"。
 - supabase_tables:数据模型表清单。每张表:
   - name:小写复数(如 users / habits / checkins)。
-  - fields:字段列表。主键统一用 id(uuid, pk=true)。关联用外键(fk="表名.字段名",如 "users.id")。
+  - fields:字段列表。主键统一用 id(uuid, pk=true)。关联用外键(fk="表名.字段名",如 "users.id")。**外键默认可空**:只有"应用必须先选/建关联实体才能记录"的强关联(如多租户 user_id)才必填;像"记一笔食物/打卡"这种轻量记录,关联字段(如 recipe_id)要可空,否则用户一记就缺外键 → PostgREST 400。
   - 业务表都带 created_at(timestamptz)。**仅当 PRD 含登录/多租户需求时**才加 user_id(uuid, fk="users.id");无登录需求时不加。
 - pages:页面/路由清单。**仅当 PRD 含登录功能时**才列 "/login"(及可选 "/register");不含登录时只列业务页面(如 ["/", "/habits"]),不要默认塞 "/login"。
 

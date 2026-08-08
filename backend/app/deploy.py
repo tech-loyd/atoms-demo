@@ -509,8 +509,9 @@ def _render_column(field: dict) -> str:
     约定(对齐 Architect prompt tools.py:_DESIGN_INSTRUCTION):
       - 主键统一 id(uuid)→ uuid primary key default gen_random_uuid()
       - 业务表都有 created_at(timestamptz)→ timestamptz not null default now()
-      - user_id(uuid, fk users.id)→ uuid not null references auth.users(id) on delete cascade
-      - 其他字段:仅类型(可空),有 fk 加 references
+      - user_id(uuid, fk users.id)→ uuid not null references auth.users(id) on delete cascade(多租户标识,RLS 依赖)
+      - 其他外键:默认可空 + references(避免阻断应用基础 CRUD,如直接记食物不强制先选 recipe)
+      - 其他字段:仅类型(可空)
     """
     name = _check_ident(field.get("name", ""), "字段名")
     ftype = str(field.get("type", "")).strip().lower()
@@ -536,8 +537,10 @@ def _render_column(field: dict) -> str:
             # 主键同时是外键(罕见):把 references 附在 primary key 后
             parts.append(_render_fk(fk))
         else:
-            # 普通外键列:not null + references(user_id 必属某用户)
-            parts.append("not null")
+            # user_id(多租户标识)必须 not null(RLS auth.uid()=user_id 依赖);
+            # 其他业务外键默认可空,避免阻断应用交互(如直接记食物/打卡,不强制先选关联实体)
+            if name == "user_id":
+                parts.append("not null")
             parts.append(_render_fk(fk))
 
     return " ".join(parts)

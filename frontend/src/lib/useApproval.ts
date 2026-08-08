@@ -17,7 +17,7 @@ import type { AgentState } from "./types";
  *
  * 为什么直接调 agent.runAgent,而不是 useCoAgent().run / useCopilotContext.resolveInterruptEvent:
  *  ① useCoAgent().run 在 v1.66.2 的实现是 `run: agent.runAgent`(方法引用,未 bind),
- *     调用即丢 `this`,HttpAgent 子类首行 `this.abortController = ...` 崩(实测 PM 的
+ *     调用即丢 `this`,HttpAgent 子类首行 `this.abortController = ...` 崩(实测会抛
  *     `Cannot set properties of undefined (setting 'abortController')`)。
  *  ② useCopilotContext().interruptEventQueue 在 legacy flow 下不会被 `on_interrupt` 填充
  *     (ag-ui-langgraph 发的是 custom event,不是标准 RUN_FINISHED interrupt),故
@@ -81,7 +81,7 @@ export function useApproval({ state, agent, running }: UseApprovalArgs): UseAppr
   const awaitingApproval = prdReady && !designReady && !filesReady;
 
   // 订阅 agent 事件,跟踪 on_interrupt 暂停态(仅用于按钮副文案准确性)。
-  // 复刻 CopilotKit useInterrupt 的 legacy 检测:on_interrupt 在 RUN_FINISHED 前到达,
+  // 还原 CopilotKit useInterrupt 的 legacy 检测:on_interrupt 在 RUN_FINISHED 前到达,
   // 于 run finalizes 时落定 pending;新一轮 RUN_STARTED/RUN_FAILED 清除。
   useEffect(() => {
     if (!agent) return;
