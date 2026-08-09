@@ -73,18 +73,17 @@ export function DeployedPreview({ deploymentUrl, viewport = "desktop", changeTok
 
   return (
     <PreviewChrome
-      addressLabel={host || "vercel.app"}
+      addressLabel={host || "preview"}
       buildStatus="passed"
-      buildBadgeTitle="部署成功 · Vercel 构建通过"
+      buildBadgeTitle="构建通过 · 后端实时构建产物"
       supabaseNote={
         <span className="min-w-0">
-          这是部署后的<span className="text-atoms-text font-semibold"> Vercel 真站点</span>
-          ,接<span className="text-atoms-text"> 真实 Supabase 后端</span>
-          (真注册 / 登录 / 持久化);预览区下方可切回 Sandpack 看 Alex 的源码改动。
+          这是<span className="text-atoms-text font-semibold">当前代码的实时预览</span>
+          (后端构建产物;Supabase 用占位配置,数据为 demo)。改代码即同步刷新,公开站点请点右上角"部署"。
         </span>
       }
       onRefresh={handleRefresh}
-      refreshTitle="刷新 Vercel 站点"
+      refreshTitle="刷新预览"
       viewport={viewport}
     >
       <iframe
