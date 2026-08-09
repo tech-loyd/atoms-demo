@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const HINTS = ["看板待办", "迷你商城", "咖啡官网", "SaaS 仪表盘"];
@@ -12,11 +11,12 @@ const HINTS = ["看板待办", "迷你商城", "咖啡官网", "SaaS 仪表盘"]
  * 视觉沿用 atoms 浅色语言(网格背景 + accent 主色 + IBM Plex Sans)。
  */
 export default function Home() {
-  const router = useRouter();
   const [idea, setIdea] = useState("");
+  // 新窗口打开 workspace(欢迎页保留,工作台另开 tab —— 用户可停留在 landing 继续浏览 / 再开新会话)
   const go = (q?: string) => {
     const v = (q ?? idea).trim();
-    router.push(v ? `/workspace?q=${encodeURIComponent(v)}` : "/workspace");
+    const url = v ? `/workspace?q=${encodeURIComponent(v)}` : "/workspace";
+    window.open(url, "_blank", "noopener");
   };
 
   return (
@@ -34,6 +34,8 @@ export default function Home() {
         </Link>
         <Link
           href="/workspace"
+          target="_blank"
+          rel="noopener noreferrer"
           className="ml-auto text-[13.5px] font-medium bg-atoms-text text-white px-3.5 py-2 rounded-lg hover:bg-black transition-colors"
         >
           进入工作台
