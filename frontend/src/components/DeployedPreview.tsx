@@ -79,7 +79,7 @@ export function DeployedPreview({ deploymentUrl, viewport = "desktop", changeTok
       supabaseNote={
         <span className="min-w-0">
           这是<span className="text-atoms-text font-semibold">当前代码的实时预览</span>
-          (后端构建产物;Supabase 用占位配置,数据为 demo)。改代码即同步刷新,公开站点请点右上角"部署"。
+          (后端构建产物,接<span className="text-atoms-text">真实 Supabase</span>,数据持久化)。改代码即同步刷新,公开站点请点右上角"部署"。
         </span>
       }
       onRefresh={handleRefresh}

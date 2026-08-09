@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -369,13 +370,22 @@ def root() -> dict:
     }
 
 
+# /api/threads 内存缓存:aget_state 远程 + 反序列化长对话 messages 慢(~3s/批),
+# 列表频繁刷新命中缓存避免重复查。删会话 invalidate;新建会话最多 _THREADS_CACHE_TTL 后可见。
+_threads_cache: dict = {"data": None, "ts": 0.0}
+_THREADS_CACHE_TTL = 20.0
+
+
 @app.get("/api/threads")
 async def list_threads() -> dict:
     """历史会话列表(从 Postgres checkpointer 查,跨设备共享,无用户归属)。
 
     每条返回 thread_id + title(prd.title)+ summary + stage。DATABASE_URL 空
-    (InMemory 兜底)→ 返回空列表(前端侧栏显空态,不崩)。
+    (InMemory 兜底)→ 返回空列表(前端侧栏显空态,不崩)。20s 内存缓存(删会话 invalidate)。
     """
+    import time
+    if _threads_cache["data"] is not None and time.time() - _threads_cache["ts"] < _THREADS_CACHE_TTL:
+        return _threads_cache["data"]
     if not settings.database_url:
         return {"threads": []}
 
@@ -386,24 +396,33 @@ async def list_threads() -> dict:
         logger.warning("GET /threads 查询 thread_id 失败:%s", exc)
         return {"threads": []}
 
-    # 每个 thread aget_state 取元数据(反序列化最新 checkpoint blob;demo 规模可接受)
-    items: list[dict] = []
-    for tid in thread_ids:
+    # 并发 aget_state:串行会 N×远程查询,本地连生产 Supabase 单次 ~3s,N 多时列表卡很久;
+    # 并发 gather 把 N 次压到 ~N/pool_size。单个 aget_state 慢/超时(>10s)则跳过该会话,不阻塞列表。
+    async def _one(_tid: str) -> dict | None:
         try:
-            snap = await agui_agent.graph.aget_state({"configurable": {"thread_id": tid}})
+            snap = await asyncio.wait_for(
+                agui_agent.graph.aget_state({"configurable": {"thread_id": _tid}}),
+                timeout=10,
+            )
         except Exception:  # noqa: BLE001
-            continue
+            return None
         if not snap or not snap.values:
-            continue
+            return None
         values = snap.values
         prd = values.get("prd") or {}
-        items.append({
-            "thread_id": tid,
+        return {
+            "thread_id": _tid,
             "title": prd.get("title") or "未命名会话",
             "summary": prd.get("summary") or "",
             "stage": _derive_stage(values),
-        })
-    return {"threads": items}
+        }
+
+    results = await asyncio.gather(*[_one(tid) for tid in thread_ids])
+    items = [r for r in results if r]
+    result = {"threads": items}
+    _threads_cache["data"] = result
+    _threads_cache["ts"] = time.time()
+    return result
 
 
 async def _list_thread_ids(database_url: str) -> list[str]:
@@ -418,7 +437,7 @@ async def _list_thread_ids(database_url: str) -> list[str]:
                 "WHERE checkpoint_ns = '' "
                 "GROUP BY thread_id "
                 "ORDER BY MAX(checkpoint_id) DESC "
-                "LIMIT 50"
+                "LIMIT 20"
             )
             rows = await cur.fetchall()
         return [r[0] for r in rows]
@@ -457,6 +476,7 @@ async def delete_thread(thread_id: str) -> dict:
     except Exception as exc:  # noqa: BLE001
         logger.warning("删除 thread 失败(%s):%s", thread_id, exc)
         return {"ok": False, "error": str(exc)}
+    _threads_cache["data"] = None  # 删除会话 invalidate 列表缓存
     return {"ok": True, "thread_id": thread_id}
 
 

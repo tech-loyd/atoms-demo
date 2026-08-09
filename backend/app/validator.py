@@ -366,6 +366,40 @@ def _format_seed_id_warning(offenders: list[str]) -> str:
     )
 
 
+def _inject_supabase_for_preview(files: list[dict], state: dict) -> list[dict]:
+    """预览 build 时注入真实 Supabase(同 deploy_app),让预览应用的核心交互(真 CRUD)可用。
+
+    复用 deploy 的注入逻辑:① inject_supabase_config 覆盖 supabase.ts 为真实 URL/key;
+    ② inject_table_prefix 把 .from('表') 改成 .from('{app_id}_表')(多租户前缀);
+    ③ _try_create_supabase_tables 建前缀表(非阻塞,无 PAT 跳过 → 种子 upsert 回落内存只读)。
+    app_id 基于 thread_id 派生(与 deploy_app 同源),保证预览与部署查同一套前缀表。
+
+    配置缺失(SUPABASE_URL / SUPABASE_ANON_KEY 没配)→ 原样返回 files(占位 supabase,
+    应用回落内存种子做只读 demo —— 生产应配齐以启用真交互)。
+    """
+    if not settings.supabase_url or not settings.supabase_anon_key:
+        return files
+    from .deploy import (  # 延后 import 避免循环
+        inject_supabase_config,
+        inject_table_prefix,
+        _try_create_supabase_tables,
+        _app_id_from_project_name,
+        _PROJECT_PREFIX,
+    )
+    design = state.get("design") or {}
+    tables = design.get("supabase_tables") or []
+    tid_hex = str(state.get("thread_id") or "").replace("-", "")
+    suffix = tid_hex[:10] or "preview"
+    app_id = _app_id_from_project_name(f"{_PROJECT_PREFIX}-{suffix}")
+    try:
+        _try_create_supabase_tables(design, app_id=app_id)
+    except Exception:  # noqa: BLE001
+        pass  # 建表失败不阻塞 build(无 PAT / 网络错 → 种子 upsert 回落内存只读)
+    files = inject_supabase_config(files, settings.supabase_url, settings.supabase_anon_key)
+    files = inject_table_prefix(files, tables, app_id)
+    return files
+
+
 # ────────────────────────────────────────────────────────────────
 # validate_build tool(create_agent 第 5 个 tool;回喂靠 ReAct ToolMessage)
 # ────────────────────────────────────────────────────────────────
@@ -422,6 +456,9 @@ def validate_build(
 
     # 用 thread_id 作 session_id,让前端 iframe 能预览后端 build 产物(不依赖 CDN)
     session_id = str(state.get("thread_id") or "").replace("-", "")[:16] or "default"
+    # 预览也接真实 Supabase(同 deploy):注入真实配置 + 表前缀 + 建表,让预览的核心交互
+    # (真 CRUD)可用,而非占位 supabase 的 demo/stub。配置缺失则原样(回落占位只读 demo)。
+    files = _inject_supabase_for_preview(files, state)
     passed, output = run_build(files, session_id=session_id)
     # 挂一条非阻塞 warning(若有非标准 .from(...) 调用),pass/fail 两种结果都带,
     # 让后端日志/agent 都能看到部署前缀注入的漏改信号。
