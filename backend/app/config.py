@@ -74,5 +74,14 @@ class Settings:
             f"http://localhost:{self.port}/preview",
         )
 
+        # LangGraph 会话持久化:Supabase Postgres 连接串。
+        # 配了 → 用 AsyncPostgresSaver(对话/PRD/代码/预览状态跨刷新 + 容器重启存活);
+        # 空 → 回落 InMemorySaver(本地/测试,进程重启即清空)。
+        # Supabase dashboard → Project Settings → Database → Connect → "URI"(Session mode,端口 5432)。
+        # 必须用 session 模式而非 transaction 模式(6543):psycopg 默认用 prepared statements,
+        # pgbouncer 事务模式会与之冲突。
+        # ⚠️ 含数据库密码,只环境读取,绝不 log/打印/注入生成应用。
+        self.database_url: str = os.getenv("DATABASE_URL", "")
+
 
 settings = get_settings()

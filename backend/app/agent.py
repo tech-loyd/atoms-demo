@@ -44,7 +44,7 @@ from .deploy import deploy_app
 from .llm import build_model
 from .prompts import SOP_SYSTEM_PROMPT
 from .state import GraphState
-from .tools import approve_prd, write_code, write_design, write_prd
+from .tools import approve_prd, update_code, write_code, write_design, write_prd
 from .validator import validate_build
 
 
@@ -92,25 +92,29 @@ class CopilotKitMiddlewareNoContext(CopilotKitMiddleware):
         return None
 
 
-def build_agent():
+def build_agent(checkpointer=None):
     """构造编译后的 LangGraph agent(CompiledStateGraph)。
 
     返回值用 `with_config({"recursion_limit": RECURSION_LIMIT})` 绑了默认 recursion
     预算。直接调 ainvoke/astream 的路径(测试、`langgraph dev`)即生效;AG-UI 服务
     路径需 `main.py` 里 `LangGraphAGUIAgent(config=...)` 再传一次(见模块顶部
     RECURSION_LIMIT 注释),因为 AGUI 层会重建 config、忽略 graph.config。
+
+    checkpointer:可选,会话状态持久化层。None → 内存 saver(进程重启即清空,
+    供 `langgraph dev`/测试/本地兜底);生产由 main.py 注入 AsyncPostgresSaver(连
+    Supabase)让状态跨刷新与容器重启存活。
     """
     model = build_model()
     agent_compiled = create_agent(
         model=model,
-        tools=[write_prd, approve_prd, write_design, write_code, validate_build, deploy_app],
+        tools=[write_prd, approve_prd, write_design, write_code, update_code, validate_build, deploy_app],
         middleware=[CopilotKitMiddlewareNoContext()],
         state_schema=GraphState,
         system_prompt=SOP_SYSTEM_PROMPT,
         name=settings.agent_name,
         # add_langgraph_fastapi_endpoint 内部会 aget_state,必须有 checkpointer;
-        # HITL interrupt 也依赖 checkpointer 持久化暂停点。demo 用内存 saver。
-        checkpointer=InMemorySaver(),
+        # HITL interrupt 也依赖 checkpointer 持久化暂停点。
+        checkpointer=checkpointer or InMemorySaver(),
     )
     # 绑默认 recursion_limit(覆盖 create_agent 自带的 9999,统一预算为 100)。
     return agent_compiled.with_config({"recursion_limit": RECURSION_LIMIT})

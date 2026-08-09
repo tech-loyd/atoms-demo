@@ -23,13 +23,19 @@ import { PreviewChrome, type Viewport } from "./PreviewChrome";
  */
 
 export interface DeployedPreviewProps {
-  /** 后端 deploy_app 写回的 vercel.app URL(形如 https://xxx.vercel.app) */
+  /** 后端 deploy_app 写回的 vercel.app URL(形如 https://xxx.vercel.app);未部署时传 preview_url */
   deploymentUrl: string;
   /** iframe 尺寸预设(桌面/平板/手机,同 SandpackPreview) */
   viewport?: Viewport;
+  /**
+   * 外部驱动的刷新令牌(如 Canvas 的 build_seq)。变化 → remount iframe,重新请求 URL。
+   * 用于迭代修改后:Validator 重建的 build 产物 dist/ 覆盖同 preview_url,需 remount 才能拉到最新
+   * (配合后端 /preview no-cache)。部署后 vercel.app 场景不传(保持固定)。
+   */
+  changeToken?: number;
 }
 
-export function DeployedPreview({ deploymentUrl, viewport = "desktop" }: DeployedPreviewProps) {
+export function DeployedPreview({ deploymentUrl, viewport = "desktop", changeToken }: DeployedPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   // iframeKey:点刷新自增 → React remount iframe → 重新请求 vercel.app(跨源下比 reload() 稳)。
   const [iframeKey, setIframeKey] = useState(0);
@@ -40,6 +46,12 @@ export function DeployedPreview({ deploymentUrl, viewport = "desktop" }: Deploye
   useEffect(() => {
     setLoaded(false);
   }, [deploymentUrl, iframeKey]);
+
+  // 外部 changeToken(如 build_seq)变化 → remount iframe(拉最新 build 产物,迭代后预览刷新)。
+  useEffect(() => {
+    if (changeToken === undefined) return;
+    setIframeKey((k) => k + 1);
+  }, [changeToken]);
 
   const handleRefresh = () => {
     // 先尝试同源路径 reload(若 vercel.app 与本应用恰好同源,直接重载最快);

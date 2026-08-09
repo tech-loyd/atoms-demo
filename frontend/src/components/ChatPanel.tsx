@@ -30,8 +30,11 @@ export function ChatPanel() {
     agent
       .runAgent({ forwardedProps: { message: q } })
       .catch((e) => console.error("[ChatPanel] runAgent 首轮失败:", e));
-    // 清掉 ?q 防止刷新/返回时重复发送
-    window.history.replaceState({}, "", window.location.pathname);
+    // 清掉 ?q 防止刷新/返回时重复发送(保留 ?t= 会话线程 ID,见 CopilotProvider 的持久化)
+    const params = new URLSearchParams(window.location.search);
+    params.delete("q");
+    const qs = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
   }, [status, agent]);
 
   return (

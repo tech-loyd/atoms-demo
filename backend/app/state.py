@@ -38,14 +38,23 @@ class GraphState(CopilotKitState):
         build_status:    Validator 产出:"passed" / "failed" / None(还没跑过)。
         build_errors:    Validator 失败时记录的构建日志(vite stderr);passed/未跑时为 None。
         iter_count:      Validator 已尝试的构建次数;到 MAX_BUILD_ITERS(3)就不再回喂。
+        build_seq:       Validator 每次**真正跑完一次 build**(无论成败)自增;前端据它判断"新一次
+                         build 完成"→ 刷新预览(迭代后 build_status 可能 passed→passed 不变,靠它感知)。
         deployment_url:  deploy_app 产出:真 vercel.app URL(https://xxx.vercel.app)。未部署时 None。
         deploy_status:   deploy_app 产出:"building" / "ready" / "failed" / None(还没部署)。
         preview_url:     Validator 产出:后端 Vite 构建产物(dist/)的静态托管 URL,
                          形如 http://localhost:8000/preview/{session_id}/dist/index.html。
                          build 通过 + 未部署时,前端 Canvas 用它 iframe 预览(不依赖 CodeSandbox CDN)。
                          build 未跑/失败/已部署时为 None(已部署优先用 deployment_url)。
+        thread_id:        当前会话 ID(由 main.py merge_state 从 AG-UI input 注入)。validator 用它
+                          派生预览 session_id(每会话独立预览目录,不再全堆 default);deploy_app 用它
+                          派生固定 vercel project_name(同会话重复部署复用同一链接)。InjectedConfig
+                          本 langgraph 版本不存在,故走 state 注入。
     """
 
+    # 当前会话 thread_id(由 main.py merge_state 注入)。validator 派生预览 session_id、
+    # deploy_app 派生固定 vercel project_name 都依赖它。
+    thread_id: Optional[str] = None
     requirement: str
     prd: PRDDict
     # Architect(Bob)产出;PM 未产前默认 None
@@ -57,6 +66,9 @@ class GraphState(CopilotKitState):
     build_status: Optional[str] = None
     build_errors: Optional[str] = None
     iter_count: int = 0
+    # Validator 每次**真正跑完一次 build**(无论成败)自增;前端据它判断"新一次 build 完成"
+    # → 刷新预览 iframe(迭代后 build_status 可能 passed→passed 不变,靠 build_seq 才能感知)。
+    build_seq: int = 0
     # Vercel 真部署的结果
     deployment_url: Optional[str] = None
     deploy_status: Optional[str] = None

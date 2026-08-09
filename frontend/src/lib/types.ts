@@ -89,6 +89,10 @@ export interface AgentState {
   // 前端只读消费:在 Sandpack 预览地址栏右侧显示 build 徽标 + 失败日志(回喂可视化)。
   build_status?: "passed" | "failed" | null;
   build_errors?: string | null; // build 失败时的 stderr/日志摘要
+  // —— 前端预览刷新信号 ——
+  // Validator 每次**真正跑完一次 build**(无论成败)自增;Canvas 监听它:递增 + passed
+  // → remount 预览 iframe 拉最新 build 产物(迭代后 build_status 可能 passed→passed 不变,靠它感知)。
+  build_seq?: number;
   // —— deploy_app tool ——
   // 后端 deploy_app(Vercel API inlined files 部署)写回;前端只读消费。
   // building=Vercel 构建中 / ready=部署完成,deployment_url 可用 / failed=部署失败 / null=未部署。

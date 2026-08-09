@@ -430,6 +430,10 @@ def validate_build(
     # 两条防线挂的 warning 合并(pass/fail 都带,让 agent/日志看到前缀注入 + 种子 id 风险)
     warnings_extra = "\n\n".join(w for w in (from_warning, seed_warning) if w)
 
+    # 每真正跑完一次 build(无论成败),build_seq 自增 —— 给前端一个"新一次 build 完成"的确定性
+    # 信号(迭代后 build_status 可能 passed→passed 不变,靠 build_seq 才能判断要刷新预览)。
+    build_seq = int(state.get("build_seq") or 0) + 1
+
     if passed:
         # build 成功 → 写 preview_url(后端 Vite 构建产物 iframe 预览,不依赖 CDN)
         preview_url = f"{settings.preview_base_url}/{session_id}/dist/index.html"
@@ -441,6 +445,7 @@ def validate_build(
             "build_errors": None,
             "iter_count": iter_count,
             "preview_url": preview_url,
+            "build_seq": build_seq,
             "messages": [ToolMessage(
                 content=msg,
                 tool_call_id=tool_call_id,
@@ -451,8 +456,9 @@ def validate_build(
     fail_msg = (
         f"❌ vite build 失败(第 {iter_count}/{MAX_BUILD_ITERS} 次)。\n\n"
         f"构建输出:\n```\n{tail}\n```\n\n"
-        "请根据上面的错误重新调用 `write_code` 修复(只改有问题的文件,保留其余)。"
-        "常见原因:import 了不存在的模块、JSX 语法错、变量/组件未定义。"
+        "请根据上面的错误重新修改代码并再次调用 validate_build:"
+        "首次生成阶段重新调用 `write_code`,迭代修改阶段重新调用 `update_code`(传原指令 + 错误)。"
+        "只改有问题的文件,保留其余。常见原因:import 了不存在的模块、JSX 语法错、变量/组件未定义。"
     )
     if warnings_extra:
         fail_msg = f"{fail_msg}\n\n{warnings_extra}"
@@ -460,6 +466,7 @@ def validate_build(
         "build_status": "failed",
         "build_errors": output,
         "iter_count": iter_count,
+        "build_seq": build_seq,
         "messages": [ToolMessage(
             content=fail_msg,
             tool_call_id=tool_call_id,

@@ -39,9 +39,7 @@ export function DeployBar({
   /** 用户点"知道了"关闭同步丢失提示 */
   onDismissSyncLost: () => void;
 }) {
-  // 没产出代码 / build 没过 → 不渲染(Canvas 早期阶段不显示部署入口)。
-  if (!canDeploy) return null;
-
+  // 部署按钮常驻右上角:build 未就绪(!canDeploy)时显示禁用态(可见但不可点),就绪后可部署。
   const building = deploying || deployStatus === "building";
 
   return (
@@ -49,15 +47,34 @@ export function DeployBar({
       {building ? (
         <BuildingState />
       ) : deployStatus === "ready" && deploymentUrl ? (
-        <ReadyState url={deploymentUrl} />
+        <ReadyState url={deploymentUrl} onDeploy={onDeploy} />
       ) : deployStatus === "failed" ? (
         <FailedState onRetry={onDeploy} />
       ) : deploySyncLost ? (
         <SyncLostState onRetry={onDeploy} onDismiss={onDismissSyncLost} />
+      ) : !canDeploy ? (
+        <DisabledState />
       ) : (
         <IdleState onDeploy={onDeploy} />
       )}
     </div>
+  );
+}
+
+/** disabled:代码还没生成或 build 未通过 —— 灰按钮占位(常驻可见,不可点 + tooltip 提示先完成构建)。 */
+function DisabledState() {
+  return (
+    <button
+      disabled
+      className="inline-flex items-center gap-1.5 h-[28px] px-3.5 rounded-lg bg-atoms-surface-2 border border-atoms-border text-atoms-text-3 text-[12px] font-semibold cursor-not-allowed"
+      title="先完成代码生成与构建校验,即可部署"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
+        <path d="M4.5 16.5L16.5 4.5M4.5 16.5H9M4.5 16.5V12M16.5 4.5H12M16.5 4.5V9" />
+        <path d="M5 21h14" />
+      </svg>
+      部署
+    </button>
   );
 }
 
@@ -142,7 +159,7 @@ function BuildingState() {
 }
 
 /** ready:URL 链接(新标签打开)+ 分享(复制链接)。 */
-function ReadyState({ url }: { url: string }) {
+function ReadyState({ url, onDeploy }: { url: string; onDeploy: () => void }) {
   const { copied, copy } = useCopyLink(url);
   // 展示用 host(去掉 https://),更紧凑;title 给完整 URL。
   const host = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -208,6 +225,18 @@ function ReadyState({ url }: { url: string }) {
           </svg>
         )}
         {copied ? "已复制" : "分享"}
+      </button>
+      {/* 重新部署:固定链接,同 URL,更新线上站点为最新代码 */}
+      <button
+        onClick={onDeploy}
+        className="inline-flex items-center gap-1.5 h-[28px] px-3 rounded-lg text-[12px] font-medium border border-atoms-border bg-atoms-surface text-atoms-text-2 hover:bg-atoms-surface-2 hover:text-atoms-text transition-all active:scale-[0.98]"
+        title="重新部署(同链接,更新线上站点为最新代码)"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}>
+          <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+          <path d="M3 3v5h5" />
+        </svg>
+        重新部署
       </button>
     </div>
   );

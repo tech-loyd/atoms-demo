@@ -69,6 +69,8 @@ export function Canvas() {
   const [viewport, setViewport] = useState<Viewport>("desktop");
   // 用户是否手动切过 view;未手动切 → 自动切(files 到位 → preview)。
   const [userPickedView, setUserPickedView] = useState(false);
+  // 预览 iframe 的 remount 令牌:build_seq 递增时自增 → DeployedPreview remount 拉最新 build 产物。
+  const [previewKey, setPreviewKey] = useState(0);
 
   // HITL 批准:直接对 agent 实例调 runAgent,发 forwardedProps.command.resume。
   const { awaitingApproval, hasInterrupt, approving, stalled, approve } = useApproval({
@@ -107,6 +109,13 @@ export function Canvas() {
     if (userPickedView) return;
     setView(stage === "files" ? "preview" : "design");
   }, [stage, userPickedView]);
+
+  // build_seq 递增(Validator 跑完一次新 build,含迭代修改后的重建)→ remount 预览 iframe,
+  // 拉最新 build 产物。配合后端 /preview no-cache,改完代码预览能看到最新效果。
+  const buildSeq = state?.build_seq ?? 0;
+  useEffect(() => {
+    if (buildSeq > 0) setPreviewKey((k) => k + 1);
+  }, [buildSeq]);
 
   const pickView = useCallback((v: View) => {
     setUserPickedView(true);
@@ -148,18 +157,16 @@ export function Canvas() {
           </span>
         </div>
 
-        {/* 右侧:部署(后期,files + build passed) */}
-        {canDeploy && (
-          <DeployBar
-            canDeploy={canDeploy}
-            deployStatus={deployStatus}
-            deploymentUrl={deploymentUrl}
-            deploying={deploying}
-            deploySyncLost={deploySyncLost}
-            onDeploy={deploy}
-            onDismissSyncLost={clearSyncLost}
-          />
-        )}
+        {/* 右侧:部署按钮常驻(build 未就绪时内部显示禁用态;部署后显示固定 vercel 链接) */}
+        <DeployBar
+          canDeploy={canDeploy}
+          deployStatus={deployStatus}
+          deploymentUrl={deploymentUrl}
+          deploying={deploying}
+          deploySyncLost={deploySyncLost}
+          onDeploy={deploy}
+          onDismissSyncLost={clearSyncLost}
+        />
       </div>
 
       {/* 内容区:按视图分流 */}
@@ -200,10 +207,8 @@ export function Canvas() {
         // Preview 视图:运行应用(Alex 写完 files 才有内容)
         <div className="flex-1 min-h-0 flex flex-col">
           {filesCount > 0 ? (
-            deployedReady ? (
-              <DeployedPreview deploymentUrl={deploymentUrl!} viewport={viewport} />
-            ) : hasBackendPreview ? (
-              <DeployedPreview deploymentUrl={previewUrl!} viewport={viewport} />
+            hasBackendPreview ? (
+              <DeployedPreview deploymentUrl={previewUrl!} viewport={viewport} changeToken={previewKey} />
             ) : (
               <SandpackPreview
                 files={files!}

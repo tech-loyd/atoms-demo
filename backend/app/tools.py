@@ -434,3 +434,141 @@ def write_code(
             ],
         }
     )
+
+
+# ────────────────────────────────────────────────────────────────
+# 5. update_code(Alex / Engineer · 迭代模式)
+#
+# 与 write_code(首次从 design 全量生成)的区别:
+# - 读 state.files(现有代码)而非 design,作上下文喂给 LLM;
+# - LLM 只输出**需要改动的文件**,后端按 path merge 覆盖,未提及文件原样保留
+#   (安全核心:用户只改一个文件,其余文件不被无意改动);
+# - 写回后清 build 态、重置 iter_count,SOP 紧跟触发 validate_build 重新校验。
+# ────────────────────────────────────────────────────────────────
+
+_UPDATE_CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。当前**已有一个可运行的 React + Vite + Tailwind + DaisyUI + Supabase 应用**(已通过 vite build)。用户要在它基础上做修改 / 调整 / 加功能 / 修 bug。
+
+**输出格式(严格遵守,只输出需要改动的文件,不要任何解释、前后文)**:
+
+每个改动文件一个块(格式同首次生成):
+
+##FILE: src/App.tsx
+```tsx
+<改动后的完整文件内容>
+```
+
+**核心原则**:
+- **只输出需要改动的文件**(每个文件的完整内容),未改动的文件一律不要输出 —— 系统会把你给的文件按路径合并覆盖,其余文件原样保留。
+- **保持现有风格**:沿用既有命名、组件拆分方式、DaisyUI 成品组件类与语义色(apple 主题已定基线)、emoji / 内联 SVG 图标方式;**不要引入新依赖或图标库**(lucide-react / react-icons 等)。
+- **改动后整体仍须通过真实 vite build**:import 路径真实存在、JSX 语法正确、所有引用的变量 / 组件都有定义、默认导出与 import 对齐。
+- 可新增文件(如新组件),但要保证被现有文件正确 import、导出对齐;新增文件同样输出完整内容。
+
+**沿用约束(改动涉及时)**:
+- Supabase 查询表名一律单引号静态字面量:`.from('表名')`,严禁模板字符串 / 变量 / 拼接(部署前缀注入依赖正则匹配字面量)。
+- 新增种子数据的 id 必须是合法 uuid v4 字面量(固定值,如 `"11111111-1111-1111-1111-111111111111"`),不要用短字符串或 `crypto.randomUUID()`。
+
+**不要产**:package.json / vite.config / tsconfig / index.html / postcss / tailwind.config / index.css(项目模板固定提供)。
+
+单文件控制在 120 行内。围栏语言标注:tsx / typescript / css。每个 ##FILE: 块必须紧跟一个围栏;路径用相对路径(src/xxx)。"""
+
+
+def _merge_files(existing: List[dict], changed: List[dict]) -> List[dict]:
+    """按 path 合并文件:changed 覆盖同 path 的 existing 文件,未提及的保留。
+
+    update_code 的安全核心:用户只改一个文件时,LLM 只输出该文件,merge 后其余文件
+    原样保留,不会被无意改动。changed 顺序追加在 existing 同 path 位置之后(保持稳定)。
+    """
+    by_path: dict = {f.get("path", ""): f for f in existing if f.get("path")}
+    for c in changed:
+        path = c.get("path", "")
+        if not path:
+            continue
+        by_path[path] = c
+    return list(by_path.values())
+
+
+@tool
+def update_code(
+    instruction: str,
+    state: Annotated[dict, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    """Alex(工程师)· 迭代模式:在已有代码(state.files)上按用户的修改指令做增量修改。
+
+    在用户已生成过初版应用后,后续对话提出"修改 / 调整 / 加功能 / 修 bug"时调用本工具
+    (而非 write_code 全量重写)。它读现有 files 作上下文,让 LLM 只产出需要改动的文件,
+    按 path 合并覆盖回 state.files。写回后清旧 build 态、重置回喂预算,紧接着由 SOP
+    调用 validate_build 重新校验。
+
+    Args:
+        instruction: 用户的修改指令(原样传入,如"把首页主标题改成 XX""加一个搜索框")。
+    """
+    files = state.get("files") if state else None
+    if not files:
+        # prompt 保证迭代模式必先有 files;这里兜底:无 files 不该进迭代,提示走完整 SOP。
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="无法增量修改:state.files 为空(还没生成过代码)。请先走完整流程(write_prd → 批准 → write_design → write_code)生成初版,再迭代修改。",
+                        tool_call_id=tool_call_id,
+                    )
+                ]
+            }
+        )
+
+    # 现有代码拼成上下文(复用 ##FILE: 围栏格式,LLM 看着改)。
+    files_context = "\n\n".join(
+        f"##FILE: {f.get('path', '')}\n```{f.get('language', '')}\n{f.get('content', '')}\n```"
+        for f in files
+    )
+
+    llm = build_model()
+    resp = llm.invoke(
+        [
+            SystemMessage(content=_UPDATE_CODE_INSTRUCTION),
+            HumanMessage(
+                content=f"现有代码:\n\n{files_context}\n\n---\n用户修改要求:{instruction}"
+            ),
+        ]
+    )
+    raw = resp.content if isinstance(resp.content, str) else str(resp.content)
+    changed = parse_files_markdown(raw)
+
+    if not changed:
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="代码修改格式异常(没解析到 ##FILE: 块)。请重新调用 update_code,严格按 ##FILE: <path> + 围栏 格式输出改动文件(只输出需要改的文件,每个文件完整内容)。",
+                        tool_call_id=tool_call_id,
+                    )
+                ]
+            }
+        )
+
+    merged = _merge_files(files, changed)
+    changed_paths = [c.get("path", "") for c in changed]
+    return Command(
+        update={
+            "files": [{**f, "status": "done"} for f in merged],
+            # 迭代是一次新的"修改 + 校验"周期:重置 build 回喂预算,清旧 build / preview 态。
+            "iter_count": 0,
+            "build_status": None,
+            "build_errors": None,
+            "preview_url": None,
+            # 给前端一个"新一次 build 完成"的确定性刷新信号(validate_build 执行时再 +1)。
+            "build_seq": int(state.get("build_seq") or 0) + 1,
+            "messages": [
+                ToolMessage(
+                    content=(
+                        f"已按你的要求修改 {len(changed)} 个文件"
+                        f"({', '.join(p for p in changed_paths[:5] if p)}"
+                        f"{'…' if len(changed_paths) > 5 else ''}),其余文件保留。"
+                        "立即调用 validate_build 重新校验。"
+                    ),
+                    tool_call_id=tool_call_id,
+                )
+            ],
+        }
+    )

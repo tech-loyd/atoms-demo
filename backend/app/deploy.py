@@ -836,10 +836,14 @@ def deploy_app(
             tool_call_id=tool_call_id,
         )]})
 
-    # 多租户隔离:project_name 同源生成 app_id(表名前缀),保证"建表用的前缀"与
-    # "注入应用代码用的前缀"是同一个(不一致 → 应用 .from('habits') 查无此表 → PostgREST 400)。
-    # project_name = atoms-app-{6hex}(Vercel 全局唯一);app_id = app_{6hex}(Postgres 标识符合规)。
-    project_name = f"{_PROJECT_PREFIX}-{secrets.token_hex(3)}"
+    # 多租户隔离 + 固定链接:project_name 基于 thread_id(稳定)→ 同一会话重复部署复用同一 vercel
+    # URL(https://atoms-app-{tid}.vercel.app);app_id 同源 → 表前缀稳定 → 数据连续(不会每次部署
+    # 新建一套表)。project_name 同源生成 app_id,保证"建表用的前缀"与"注入应用代码用的前缀"一致
+    # (不一致 → 应用 .from('habits') 查无此表 → PostgREST 400)。
+    # thread_id 由 main.py merge_state 注入 state(InjectedConfig 本 langgraph 版本不存在)。
+    _tid_hex = str(state.get("thread_id") or "").replace("-", "")
+    suffix = _tid_hex[:10] or secrets.token_hex(3)  # thread_id 兜底(空则随机,理论不发生)
+    project_name = f"{_PROJECT_PREFIX}-{suffix}"
     app_id = _app_id_from_project_name(project_name)
     design = state.get("design") or {}
     tables = design.get("supabase_tables") or []
