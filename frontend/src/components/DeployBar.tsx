@@ -171,7 +171,7 @@ function ReadyState({ url, onDeploy }: { url: string; onDeploy: () => void }) {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="group inline-flex items-center gap-1.5 h-[28px] pl-2.5 pr-3 rounded-lg bg-atoms-surface border border-atoms-border-strong text-atoms-text-2 hover:border-atoms-accent-line hover:bg-atoms-accent-soft transition-all max-w-[260px]"
+        className="group inline-flex items-center gap-1.5 h-[28px] pl-2.5 pr-3 rounded-lg bg-atoms-surface border border-atoms-border-strong text-atoms-text-2 hover:border-atoms-accent-line hover:bg-atoms-accent-soft transition-all max-w-[180px]"
         title={`在新标签打开:${url}`}
       >
         <svg
@@ -226,17 +226,16 @@ function ReadyState({ url, onDeploy }: { url: string; onDeploy: () => void }) {
         )}
         {copied ? "已复制" : "分享"}
       </button>
-      {/* 重新部署:固定链接,同 URL,更新线上站点为最新代码 */}
+      {/* 重新部署:固定链接,同 URL,更新线上站点为最新代码(图标 only 省 space,title 提示) */}
       <button
         onClick={onDeploy}
-        className="inline-flex items-center gap-1.5 h-[28px] px-3 rounded-lg text-[12px] font-medium border border-atoms-border bg-atoms-surface text-atoms-text-2 hover:bg-atoms-surface-2 hover:text-atoms-text transition-all active:scale-[0.98]"
+        className="inline-flex items-center justify-center w-[28px] h-[28px] rounded-lg text-atoms-text-2 border border-atoms-border bg-atoms-surface hover:bg-atoms-surface-2 hover:text-atoms-text transition-all active:scale-[0.98]"
         title="重新部署(同链接,更新线上站点为最新代码)"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}>
           <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
           <path d="M3 3v5h5" />
         </svg>
-        重新部署
       </button>
     </div>
   );

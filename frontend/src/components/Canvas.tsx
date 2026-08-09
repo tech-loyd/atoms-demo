@@ -152,7 +152,7 @@ export function Canvas() {
               : view === "code"
                 ? `workspace · ${filesCount > 0 ? `${filesCount} files` : "等待生成"}`
                 : deployedReady
-                  ? `canvas · 应用预览 · ${viewportLabel(viewport)}`
+                  ? `canvas · 应用预览`
                   : `canvas · ${filesCount > 0 ? "应用预览" : "等待生成"}`}
           </span>
         </div>
