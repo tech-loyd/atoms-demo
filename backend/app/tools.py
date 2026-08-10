@@ -136,19 +136,26 @@ _DESIGN_INSTRUCTION = """你是一位资深架构师 Bob。请根据给定的 PR
 
 要求:
 - product_type:三选一,"web_app" / "landing" / "tool"。
-- supabase_tables:数据模型表清单。每张表:
+- supabase_tables:数据模型表清单(**纯工具 / 单页应用 —— 计数器、计算器、单位转换、单机展示,无多端共享、无登录 —— 返回空数组 `[]`,数据用 localStorage,不为凑数塞表**)。有业务数据时,每张表:
   - name:小写复数(如 users / habits / checkins)。
   - fields:字段列表。主键统一用 id(uuid, pk=true)。关联用外键(fk="表名.字段名",如 "users.id")。**外键默认可空**:只有"应用必须先选/建关联实体才能记录"的强关联(如多租户 user_id)才必填;像"记一笔食物/打卡"这种轻量记录,关联字段(如 recipe_id)要可空,否则用户一记就缺外键 → PostgREST 400。
   - 业务表都带 created_at(timestamptz)。**仅当 PRD 含登录/多租户需求时**才加 user_id(uuid, fk="users.id");无登录需求时不加。
 - pages:页面/路由清单。**仅当 PRD 含登录功能时**才列 "/login"(及可选 "/register");不含登录时只列业务页面(如 ["/", "/habits"]),不要默认塞 "/login"。
 
-界面结构(决定后续代码生成的丰富度,务必写清):
-- 主界面要拆成多个组件:**顶部导航栏 + 统计卡片区(总数 / 完成率 / 今日进度等聚合指标)+ 主列表 + 录入表单**,不要设计成"只有一个添加按钮"的单薄页面。
-- 统计指标根据业务表字段设计(如习惯追踪:习惯总数、今日完成数、完成率、连续打卡天数)。
+界面结构(匹配 PRD 复杂度,严禁为凑组件数堆砌):
+- **简单工具 / 单交互(计数器、计算器)**:单一主交互区(核心控件 + 状态显示),**不要**导航栏、统计卡片、列表、表单。
+- **CRUD 列表应用(打卡、待办、记账)**:才有导航 + 主列表 + 录入表单;**仅当 PRD 明确要聚合指标**(如"完成率""今日进度")才加统计卡片区,指标根据业务表字段设计(如习惯追踪:习惯总数、今日完成数、完成率、连续打卡天数)。
+- 不设计 PRD 没要求的板块。
 
-只覆盖 PRD 提到的功能,不编造多余表。表数量 2-5 张为宜。"""
+只覆盖 PRD 提到的功能,不编造多余表。表数量按需(0-5 张):无业务数据的应用为 0(空数组),CRUD 应用 2-5 张。"""
 
-_CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定的设计文档,生成一个精致、有视觉冲击力、开箱即丰盈的 React + Vite + Tailwind + DaisyUI + Supabase 应用源码(严禁冷启动空列表)。
+_CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定的设计文档,生成一个 React + Vite + Tailwind + DaisyUI 应用源码。
+
+**最高原则:严格贴合 PRD / design 范围** —— PRD 要什么做什么,绝不为"看起来丰富"而堆砌 PRD 没要求的功能、模块、统计或预设数据。简单需求就给简单实现(如计数器 = 一个数字 + 几个按钮),**不要套"仪表盘"模板、不要硬造 PRD 没要的板块**。
+
+## 数据后端(由 design.supabase_tables 决定,严禁自行变更)
+- `design.supabase_tables` **非空** → 用 Supabase:产出 `src/lib/supabase.ts`,数据走 CRUD,种子 upsert 进库(规则见下"Supabase 种子")。
+- `design.supabase_tables` **为空** → **纯前端 localStorage**:**禁止产出 `src/lib/supabase.ts`、禁止 import supabase、禁止任何 `.from()` / `createClient` / `supabase.auth`**;数据用 localStorage 持久化(读 `localStorage.getItem` + `JSON.parse`;写 `setItem` + `JSON.stringify`),初始值用前端常量(刷新保留)。无 uuid、无 upsert。
 
 **输出格式(严格遵守,只输出文件块,不要任何解释、前后文)**:
 
@@ -164,12 +171,14 @@ _CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定�
 <完整文件内容>
 ```
 
-文件清单(6-8 个核心 src 文件,按需选择;不要超 8 个):
+文件清单(按需选择,不要超 8 个):
 
 **始终产出**:
-1. src/lib/supabase.ts — Supabase client(`createClient`,**必须 `export const supabase`**)。URL/key 用占位 `https://YOUR-PROJECT.supabase.co` + 字符串 `"YOUR_SUPABASE_ANON_KEY"`。**部署时系统会覆盖为真实配置**(注入 backend/.env 的 SUPABASE_URL + anon key),所以这里只要保证 `export const supabase = createClient(...)` 这一行结构正确即可。
-2. src/App.tsx — 根组件(其内部逻辑见下方条件化说明)。
-3. src/main.tsx — React 入口(可 `import './index.css'`,index.css 由项目模板提供)。
+1. src/App.tsx — 根组件(其内部逻辑见下方条件化说明)。
+2. src/main.tsx — React 入口(可 `import './index.css'`,index.css 由项目模板提供)。
+
+**仅当 `design.supabase_tables` 非空才产出**:
+- src/lib/supabase.ts — Supabase client(`createClient`,**必须 `export const supabase`**)。URL/key 用占位 `https://YOUR-PROJECT.supabase.co` + 字符串 `"YOUR_SUPABASE_ANON_KEY"`。**部署时系统会覆盖为真实配置**(注入 backend/.env 的 SUPABASE_URL + anon key),保证 `export const supabase = createClient(...)` 结构正确即可。**design 无表时严禁产出本文件、严禁任何 supabase 调用**(构建校验会拦截并要求重写)。
 
 **条件产出(仅当 design.supabase_tables 出现 user_id 字段、或 PRD/design 明确含登录/auth 时才产;否则一律不产)**:
 - src/components/Auth.tsx — 邮箱注册/登录(magic link 或邮箱密码)。用 `import { supabase } from '@/lib/supabase'` 引用 client。
@@ -180,19 +189,21 @@ _CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定�
 项目模板已集成 DaisyUI v4(Tailwind 组件库)+ 系统字体(SF Pro 优先)+ **apple 主题(Apple 风:系统蓝 #0071e3 + 大圆角 + 浅灰背景 #f5f5f7)**。**必须用 DaisyUI 成品组件类搭界面**,不要自己堆 Tailwind 工具类去模拟按钮/卡片/导航——DaisyUI 的类已自带设计基线(配色/圆角/阴影/hover/间距都帮你定好了),直接用即可。
 常用类(优先用):导航 `navbar`/`menu`/`avatar`;统计 `stats`>`stat`(含 `stat-title`/`stat-value`/`stat-desc`/`stat-figure`);卡片 `card`>`card-body`>`card-title`/`card-actions`;进度 `progress progress-primary`;状态 `badge badge-success`/`badge-info`/`badge-warning`/`badge-error`;按钮 `btn btn-primary`/`btn btn-ghost`/`btn-sm`/`btn-outline`;表单 `form-control`+`label-text`+`input input-bordered`/`select select-bordered`/`textarea textarea-bordered`;布局 `container mx-auto`/`grid grid-cols-2 md:grid-cols-4 gap-4`/`flex items-center gap-3`;语义色 `text-primary`/`text-success`/`text-warning`/`text-error`/`text-base-content/60`。
 
-**业务组件(始终产出,按职责拆分,给足页面空间)**:
-- src/components/Dashboard.tsx — 主界面容器:编排"navbar + stats 统计区 + 主列表 + 录入表单",整体包 `container mx-auto p-4 md:p-8`。
-- src/components/Stats.tsx — 统计卡片区:用 `stats`(或 grid 排多个 `stats`)展示 2-4 个聚合指标(总数/完成率/今日进度,列表数据本地算),每个 `stat` 配 `stat-figure`(emoji)+`stat-title`+`stat-value`(语义色如 `text-primary`)+`stat-desc`。
-- src/components/<业务>List.tsx(如 HabitList.tsx)—— 主业务表 CRUD:用 `card` 网格展示列表项,每项 `card-body` 含 `card-title`(配 `badge` 状态)+ 描述 + `progress` 进度 + `card-actions` 里的 `btn`(打卡/编辑/删除)。
-- src/components/Add<X>Form.tsx — 录入表单:`card` 内放 `form-control` 组(`input input-bordered`/`select select-bordered`),提交用 `btn btn-primary`;弹窗形态可用 DaisyUI `modal`。
+**业务组件(按 design 的界面结构按需产出,严禁无脑套模板)**:
+组件数量与拆分**匹配 PRD 复杂度**,design 没要求的组件不造:
+- **简单工具 / 单交互(计数器、计算器、单位转换)**:通常只要 1 个主组件(在 App.tsx 或一个 Core 组件里完成"状态显示 + 控件 + 即时反馈"),**不要** Dashboard / Stats / List / Form,不要导航栏、不要统计卡片、不要预设多条示例数据。
+- **CRUD 列表应用(打卡、待办、记账)**:才有 `<业务>List.tsx`(`card` 网格,每项 `card-body` 含 `card-title` + `badge` 状态 + `progress` 进度 + `card-actions` 里的 `btn`)+ `Add<X>Form.tsx`(`card` 内 `form-control` 组 + `input input-bordered`/`select select-bordered` + `btn btn-primary`,弹窗用 `modal`)。**仅当 PRD 明确要聚合指标**才加 `Stats.tsx`(`stats`>`stat`,配 `stat-figure`(emoji)+`stat-title`+`stat-value`(语义色如 `text-primary`)+`stat-desc`);多视图才加 `Dashboard.tsx` 编排(`container mx-auto p-4 md:p-8`)。
+- 不要为了凑组件数硬造 PRD 没要的模块。
 
-**页面丰富度(关键,严禁做成单薄页面)**:
-- 主界面必须含 **顶部导航栏(产品名 + 可选用户信息)+ 统计卡片区(2-4 张卡片)+ 主列表(卡片或行项,带图标和状态)+ 录入表单**,而不是只有一个"添加"按钮。
-- **严禁冷启动空列表,且种子必须与库一致(关键 —— 否则用户一写就 400)**:主业务表组件里 hardcode 3-5 条 demo 数据作种子(如习惯追踪:["晨跑 5 公里","阅读 30 分钟","冥想 10 分钟","早睡 23 点前","写日报"];待办:["完成周报","回复邮件","准备周会"])。两条硬约束:
-  1. **种子 id 必须是合法 uuid 字面量**:每个种子写死一个**固定** uuid v4(如 `"11111111-1111-1111-1111-111111111111"`、`"22222222-2222-2222-2222-222222222222"`、`"33333333-3333-3333-3333-333333333333"` …,固定是为了 upsert 幂等;不要用 `crypto.randomUUID()` 这种每次变的)。**严禁**用 `"d1"` / `"1"` / 短字符串等非 uuid 作 id —— 库主键是 uuid,非 uuid 写入会被 PostgREST 拒(400 / 22P02 invalid input syntax for type uuid)。
-  2. **种子必须写进 Supabase,不能只在前端渲染**:首次加载先查库;**库为空时用 `.upsert(种子数组, { onConflict: 'id' })` 写进对应表,再用查询返回的结果渲染**(仅当查询本身网络失败时,才临时用内存种子渲染只读视图)。否则用户对种子项做写操作(如打卡 insert)时,前端拿内存假 id 去插 uuid 外键 → 必 22P02/400。带 user_id 的表,种子 upsert 要附当前登录用户 id(未登录则不 seed,登录后再 seed)。
-- **一切写操作(insert/update/delete)用到的外键 id 必须取自 Supabase 查询返回的对象,严禁直接用前端内存兜底数组里的 id**(同因:内存 id 可能是非法 uuid / 库里根本不存在)。
-- **严禁冷启动空列表(只读兜底,仅在网络失败时用)**:`upsert 种子 → 查库渲染` 是主路径;只有当 Supabase 查询本身抛错(网络/配额)时,才回落到内存种子做**只读展示**,并在 UI 提示"离线演示数据,登录/联网后可操作"。
+**页面范围 = PRD 范围(关键,严禁堆砌)**:
+- 主界面**只含 PRD 要求的元素**。简单工具聚焦核心交互(显示 + 按钮 + 反馈),**不要**统计卡片、不要预设多条示例数据、不要创建表单、不要导航栏 —— 这些只在 PRD 明确要时才加。
+- **首屏初始数据,按数据后端分两路**:
+  - **localStorage 路径(design 无表)**:用前端常量作初始值(如计数器初始 0,或读 localStorage 上次值),按需读写 localStorage。**不要**预设 PRD 没要求的示例数据。
+  - **Supabase 路径(design 有表,且仅 CRUD 列表类应用)**:严禁冷启动空列表 —— 主业务表组件 hardcode 3-5 条种子(如习惯追踪:["晨跑 5 公里","阅读 30 分钟","冥想 10 分钟","早睡 23 点前","写日报"])。两条硬约束:
+    1. **种子 id 必须是合法 uuid 字面量**:每个种子写死一个**固定** uuid v4(如 `"11111111-1111-1111-1111-111111111111"`、`"22222222-2222-2222-2222-222222222222"`、`"33333333-3333-3333-3333-333333333333"` …;固定是为 upsert 幂等;不要用 `crypto.randomUUID()`)。**严禁**用 `"d1"` / `"1"` 等非 uuid —— 库主键是 uuid,非 uuid 写入被 PostgREST 拒(400 / 22P02)。
+    2. **种子必须写进 Supabase,不能只在前端渲染**:首次加载先查库;**库为空时 `.upsert(种子数组, { onConflict: 'id' })` 写库,再用查询返回结果渲染**。否则用户对种子项写入时拿内存假 id 插 uuid 外键 → 22P02/400。带 user_id 的表,种子 upsert 附当前登录用户 id(未登录不 seed,登录后再 seed)。
+- **Supabase 路径下,一切写操作(insert/update/delete)用到的外键 id 必须取自 Supabase 查询返回的对象,严禁用前端内存兜底数组里的 id**(同因:内存 id 可能非法 uuid / 库里不存在)。
+- **严禁写"离线演示 / demo 数据 / 降级兜底"**:查询失败就显示明确错误提示(如"数据加载失败,请检查网络"),**不要**塞假数据掩盖、不要挂"离线演示"徽章。
 
 **视觉设计(Apple 风,DaisyUI apple 主题已提供基线)**:
 - **风格基调:Apple 产品页质感** —— 轻盈、大量留白(外层 `container mx-auto p-6 md:p-10`)、柔和。**大圆角由主题提供**(card/stats 自带 ~20px 圆角,不要手动加 `rounded-*`);导航栏/浮层可加 `backdrop-blur-xl bg-base-100/70` 营造毛玻璃。主色 `primary`(系统蓝),页面底 `base-200`(浅灰),卡片底 `base-100`(白)。
@@ -209,6 +220,7 @@ _CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。请根据给定�
 - **代码必须能通过真实 vite build**:import 路径真实存在、JSX 语法正确、所有引用的变量/组件都有定义、默认导出与 import 对齐。系统会跑真实的 `vite build` 校验,失败会被要求重写。
 - 单文件控制在 120 行内,精炼、可直接写盘,不堆样板注释。
 - 围栏语言标注:tsx / typescript / css。
+- **数据后端严格守 design**:`design.supabase_tables` 为空时,代码里不得出现任何 supabase 痕迹(`supabase` / `createClient` / `.from()` / `@/lib/supabase`),数据一律 localStorage —— 否则构建校验会判失败并要求重写。
 - 每个 ##FILE: 块必须紧跟一个围栏;路径用相对路径(src/xxx),不要带项目名前缀。"""
 
 
@@ -378,13 +390,18 @@ def write_code(
             }
         )
 
+    tables = design.get("supabase_tables", [])
     design_brief = (
         f"产品:{prd.get('title', '') if prd else ''}\n"
         f"product_type: {design.get('product_type', '')}\n"
         f"数据表:\n"
-        + "\n".join(
-            f"- {t['name']}({', '.join(f['name']+':'+f['type'] for f in t.get('fields', []))})"
-            for t in design.get("supabase_tables", [])
+        + (
+            "\n".join(
+                f"- {t['name']}({', '.join(f['name']+':'+f['type'] for f in t.get('fields', []))})"
+                for t in tables
+            )
+            if tables
+            else "(无 —— 本应用无数据表,数据层用 localStorage,严禁使用 Supabase)"
         )
         + f"\n页面:{design.get('pages', [])}"
     )
@@ -464,6 +481,7 @@ _UPDATE_CODE_INSTRUCTION = """你是一位资深前端工程师 Alex。当前**�
 - 可新增文件(如新组件),但要保证被现有文件正确 import、导出对齐;新增文件同样输出完整内容。
 
 **沿用约束(改动涉及时)**:
+- **数据后端跟随现状**:若现有代码无 Supabase 调用(纯 localStorage 应用),不要引入 Supabase;若用户要求改用 localStorage,按 localStorage 实现(`localStorage.getItem`+`JSON.parse` 读,`setItem`+`JSON.stringify` 写)。反之,无表应用若误用了 Supabase,构建校验会拦下并要求重写。
 - Supabase 查询表名一律单引号静态字面量:`.from('表名')`,严禁模板字符串 / 变量 / 拼接(部署前缀注入依赖正则匹配字面量)。
 - 新增种子数据的 id 必须是合法 uuid v4 字面量(固定值,如 `"11111111-1111-1111-1111-111111111111"`),不要用短字符串或 `crypto.randomUUID()`。
 

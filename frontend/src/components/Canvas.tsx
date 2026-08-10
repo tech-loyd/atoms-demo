@@ -103,6 +103,8 @@ export function Canvas() {
   const deployedReady = deployStatus === "ready" && !!deploymentUrl;
   const previewUrl = state?.preview_url ?? null;
   const hasBackendPreview = !!previewUrl && buildStatus === "passed";
+  // design 是否含数据表 → 预览提示条文案(Supabase 持久化 / localStorage 本地存储)
+  const hasTables = (state?.design?.supabase_tables?.length ?? 0) > 0;
 
   // view 自动切:files 到位(Alex 写完)→ Preview;其余 → Design(规划阶段始终在 Design 视图)。
   useEffect(() => {
@@ -208,7 +210,7 @@ export function Canvas() {
         <div className="flex-1 min-h-0 flex flex-col">
           {filesCount > 0 ? (
             hasBackendPreview ? (
-              <DeployedPreview deploymentUrl={previewUrl!} viewport={viewport} changeToken={previewKey} />
+              <DeployedPreview deploymentUrl={previewUrl!} viewport={viewport} changeToken={previewKey} hasTables={hasTables} />
             ) : (
               <SandpackPreview
                 files={files!}

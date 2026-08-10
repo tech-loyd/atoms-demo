@@ -33,9 +33,11 @@ export interface DeployedPreviewProps {
    * (配合后端 /preview no-cache)。部署后 vercel.app 场景不传(保持固定)。
    */
   changeToken?: number;
+  /** design 是否含数据表 → 决定提示条文案(Supabase 持久化 / localStorage 本地存储) */
+  hasTables?: boolean;
 }
 
-export function DeployedPreview({ deploymentUrl, viewport = "desktop", changeToken }: DeployedPreviewProps) {
+export function DeployedPreview({ deploymentUrl, viewport = "desktop", changeToken, hasTables = true }: DeployedPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   // iframeKey:点刷新自增 → React remount iframe → 重新请求 vercel.app(跨源下比 reload() 稳)。
   const [iframeKey, setIframeKey] = useState(0);
@@ -79,7 +81,13 @@ export function DeployedPreview({ deploymentUrl, viewport = "desktop", changeTok
       supabaseNote={
         <span className="min-w-0">
           这是<span className="text-atoms-text font-semibold">当前代码的实时预览</span>
-          (后端构建产物,接<span className="text-atoms-text">真实 Supabase</span>,数据持久化)。改代码即同步刷新,公开站点请点右上角"部署"。
+          (后端构建产物,
+          {hasTables ? (
+            <>接<span className="text-atoms-text">真实 Supabase</span>,数据持久化</>
+          ) : (
+            <>本地存储 <span className="text-atoms-text">localStorage</span>,刷新保留</>
+          )}
+          )。改代码即同步刷新,公开站点请点右上角"部署"。
         </span>
       }
       onRefresh={handleRefresh}

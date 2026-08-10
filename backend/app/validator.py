@@ -366,6 +366,31 @@ def _format_seed_id_warning(offenders: list[str]) -> str:
     )
 
 
+def scan_supabase_when_no_tables(files: list[dict], design: dict | None) -> list[str]:
+    """design 无数据表时,扫代码是否违背"纯 localStorage"——出现 supabase 痕迹即违规。
+
+    第一道防线在 tools.py:_CODE_INSTRUCTION(prompt 硬约束,无表禁用 Supabase);本检测是
+    第二道硬护栏,validate_build 在跑 vite build 前调用,有违规 → 跳过 build、失败回喂。
+
+    判违规:`design.supabase_tables` 为空 + 任意文件内容含 "supabase"(不区分大小写)或
+    "createclient"。纯 localStorage 应用不该出现这些词;Array.from / Buffer.from 等不含
+    "supabase",无误伤。design 有表 → 返回 [](放行)。
+    """
+    tables = (design or {}).get("supabase_tables") or []
+    if tables:
+        return []
+    offenders: list[str] = []
+    for f in files:
+        path = (f.get("path") or "").replace("\\", "/")
+        content = f.get("content")
+        if not isinstance(content, str):
+            continue
+        low = content.lower()
+        if "supabase" in low or "createclient" in low:
+            offenders.append(path)
+    return offenders
+
+
 def _inject_supabase_for_preview(files: list[dict], state: dict) -> list[dict]:
     """预览 build 时注入真实 Supabase(同 deploy_app),让预览应用的核心交互(真 CRUD)可用。
 
@@ -388,6 +413,8 @@ def _inject_supabase_for_preview(files: list[dict], state: dict) -> list[dict]:
     )
     design = state.get("design") or {}
     tables = design.get("supabase_tables") or []
+    if not tables:
+        return files  # design 无表 → 纯 localStorage 应用,不注入 Supabase(避免凭空多一个没人用的 supabase.ts)
     tid_hex = str(state.get("thread_id") or "").replace("-", "")
     suffix = tid_hex[:10] or "preview"
     app_id = _app_id_from_project_name(f"{_PROJECT_PREFIX}-{suffix}")
@@ -452,6 +479,29 @@ def validate_build(
                 ),
                 tool_call_id=tool_call_id,
             )],
+        })
+
+    # 硬护栏:design 无表却用了 Supabase → 数据后端不一致,跳过 vite build 直接回喂
+    # (prompt 软约束的兜底,把"过度设计"在交付前拦下)。判违规见 scan_supabase_when_no_tables。
+    no_table_violations = scan_supabase_when_no_tables(files, state.get("design") or {})
+    if no_table_violations:
+        build_seq = int(state.get("build_seq") or 0) + 1
+        offenders = ", ".join(no_table_violations[:8])
+        fail_msg = (
+            f"❌ 数据后端不一致(第 {iter_count}/{MAX_BUILD_ITERS} 次):design 无数据表"
+            f"(supabase_tables 为空),但代码里引用了 Supabase(出现在:{offenders})。\n"
+            "本应用应为**纯前端 localStorage 应用**:\n"
+            "  - 删除所有 `import ... from '@/lib/supabase'`、`createClient`、`.from(...)`、`supabase.auth` 调用;\n"
+            "  - 删除 src/lib/supabase.ts(若存在);\n"
+            "  - 数据改用 localStorage 持久化:读 `localStorage.getItem(key)` + `JSON.parse`;写 `setItem(key, JSON.stringify(...))`;初始值用前端常量。\n"
+            "改完重新调用 validate_build(首次阶段 write_code / 迭代阶段 update_code)。"
+        )
+        return Command(update={
+            "build_status": "failed",
+            "build_errors": fail_msg,
+            "iter_count": iter_count,
+            "build_seq": build_seq,
+            "messages": [ToolMessage(content=fail_msg, tool_call_id=tool_call_id)],
         })
 
     # 用 thread_id 作 session_id,让前端 iframe 能预览后端 build 产物(不依赖 CDN)

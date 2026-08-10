@@ -852,14 +852,14 @@ def deploy_app(
     ddl_result = _try_create_supabase_tables(design, app_id=app_id)
     ddl_note = _format_ddl_note(ddl_result)
 
-    # 1) 注入 Supabase 配置(覆盖 src/lib/supabase.ts)
-    files_with_supabase = inject_supabase_config(
-        files, settings.supabase_url, settings.supabase_anon_key
-    )
-
-    # 1.5) 注入表名前缀(关键):.from('habits') → .from('{app_id}_habits'),
-    # 让应用代码访问的前缀表与第 0 步建的表一致(多租户隔离)。
-    files_prefixed = inject_table_prefix(files_with_supabase, tables, app_id)
+    # 1) 注入 Supabase 配置 + 表前缀(仅 design 有表时)。无表 → 纯 localStorage 应用,不注入
+    # (避免凭空多一个没人用的 src/lib/supabase.ts,且 deploy 产物与 validator 预览保持一致)。
+    if tables:
+        files = inject_supabase_config(
+            files, settings.supabase_url, settings.supabase_anon_key
+        )
+        files = inject_table_prefix(files, tables, app_id)
+    files_prefixed = files
 
     # 2) 创建部署(用同源 project_name,Vercel URL 与 app_id 共用 hex 后缀)
     try:
